@@ -35,6 +35,11 @@ h2{font:700 24px/1.2 Georgia,"Times New Roman",serif;margin:0 0 6px;padding-bott
 .off .d{opacity:.6}
 .sold{font-size:12px;color:var(--mut);border:1px solid var(--ln);border-radius:6px;padding:1px 6px}
 .msg{padding:80px 0;text-align:center;color:var(--mut)}
+.logo{display:block;max-width:140px;max-height:84px;object-fit:contain;margin:0 0 14px}
+.item.has{display:flex;gap:14px;align-items:flex-start}
+.item .body{flex:1;min-width:0}
+.ph{flex:none;width:88px;height:88px;object-fit:cover;border-radius:10px;background:var(--chip)}
+.off .ph{opacity:.45}
 </style>
 </head>
 <body>
@@ -68,16 +73,19 @@ async function init() {
   const tel = (R.phone || '').replace(/[^\d+]/g, '');
 
   const shown = cats.map(c => ({ c, list: items.filter(i => i.category_id === c.id) })).filter(x => x.list.length);
-  let h = `<header><h1>${esc(R.name)}</h1>${R.description ? `<p class="desc">${esc(R.description)}</p>` : ''}<div class="info">
+  let h = `<header>${R.logo_url ? `<img class="logo" src="${esc(R.logo_url)}" alt="${esc(R.name)} logo">` : ''}<h1>${esc(R.name)}</h1>${R.description ? `<p class="desc">${esc(R.description)}</p>` : ''}<div class="info">
     ${tel ? `<a href="tel:${esc(tel)}">Call ${esc(R.phone)}</a>` : ''}
     ${R.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(R.address)}" target="_blank" rel="noopener">${esc(R.address)}</a>` : ''}</div></header>`;
   if (!shown.length) { h += '<div class="msg">The menu is coming soon.</div>'; app.innerHTML = h; return; }
   h += `<nav aria-label="Menu categories">${shown.map(({ c }) => `<a href="#c-${c.id}">${esc(c.name)}</a>`).join('')}</nav>`;
   for (const { c, list } of shown) {
     h += `<section id="c-${c.id}"><h2>${esc(c.name)}</h2>` + list.map(i => `
-      <div class="item ${i.available ? '' : 'off'}">
-        <div class="line"><span class="name">${esc(i.name)}</span><span class="leader"></span>${i.available ? '' : '<span class="sold">Sold out</span>'}<span class="price">${fmt(i.price)}</span></div>
-        ${i.description ? `<div class="d">${esc(i.description)}</div>` : ''}
+      <div class="item ${i.available ? '' : 'off'} ${i.image_url ? 'has' : ''}">
+        ${i.image_url ? `<img class="ph" loading="lazy" src="${esc(i.image_url)}" alt="${esc(i.name)}">` : ''}
+        <div class="body">
+          <div class="line"><span class="name">${esc(i.name)}</span><span class="leader"></span>${i.available ? '' : '<span class="sold">Sold out</span>'}<span class="price">${fmt(i.price)}</span></div>
+          ${i.description ? `<div class="d">${esc(i.description)}</div>` : ''}
+        </div>
       </div>`).join('') + '</section>';
   }
   app.innerHTML = h;
