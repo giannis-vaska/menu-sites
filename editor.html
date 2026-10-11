@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Menu Editor</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{--bg:#eef1f4;--card:#fff;--tx:#14202b;--mut:#64727f;--ac:#0f766e;--acx:#fff;--bd:#d6dde3;--dng:#b42318}
+@media(prefers-color-scheme:dark){:root{--bg:#10171d;--card:#18222b;--tx:#e8eef3;--mut:#8b9aa7;--ac:#2dd4bf;--acx:#06201d;--bd:#2a3844;--dng:#f97066}}
+*{box-sizing:border-box}
+body{margin:0 auto;max-width:720px;padding:16px 16px 70px;font:16px/1.45 system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--tx)}
+h1{font-size:22px;margin:4px 0 4px}
+h2{font-size:17px;margin:0}
+input,button,.btn,textarea{font:inherit;border-radius:8px;border:1px solid var(--bd);padding:9px 11px;background:var(--card);color:var(--tx)}
+input,textarea{width:100%}
+button,.btn{cursor:pointer;text-decoration:none;display:inline-block;font-size:14px;padding:7px 11px}
+button:focus-visible,input:focus-visible,.btn:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.primary{background:var(--ac);color:var(--acx);border-color:var(--ac);font-weight:600}
+.danger{color:var(--dng)}
+.panel{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:16px}
+.stack{display:grid;gap:10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row>input{flex:1;min-width:0;width:auto}
+.mut{color:var(--mut);font-size:14px}
+.cat{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:16px;display:grid;gap:10px}
+.cname{font-weight:700;font-size:17px}
+.item{border-top:1px solid var(--bd);padding-top:10px;display:grid;gap:8px}
+.item .price{flex:0 0 90px;text-align:right}
+.item .row.between{justify-content:space-between}
+label.chk{display:flex;gap:6px;align-items:center;font-size:14px}
+label.chk input{width:auto}
+details summary{cursor:pointer;font-weight:600}
+details[open] summary{margin-bottom:10px}
+input[type=color]{padding:2px;height:40px;width:60px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div id="app"><p class="mut">Loading…</p></div>
+<div id="toast"></div>
+<script>
+const SB = supabase.createClient('https://ssqyxamguwltrhelxpfs.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcXl4YW1ndXdsdHJoZWx4cGZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3MTI3ODIsImV4cCI6MjEwNzI4ODc4Mn0.62Q6CQXNSO-FsPT_NDhmN3DIrFMK4ibwsCDJV20GpAo');
+const app = document.getElementById('app');
+const RID = new URLSearchParams(location.search).get('id');
+let R, cats = [], items = [];
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const parsePrice = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) && n >= 0 ? n : null; };
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 1800); }
+
+async function init() {
+  const { data } = await SB.auth.getSession();
+  if (!data.session || !RID) { location.href = 'index.html'; return; }
+  load();
+}
+
+async function load() {
+  const y = scrollY;
+  const r = await SB.from('restaurants').select('*').eq('id', RID).single();
+  if (r.error) return toast(r.error.message);
+  R = r.data;
+  const c = await SB.from('menu_categories').select('*').eq('restaurant_id', RID).order('sort_order');
+  if (c.error) return toast(c.error.message);
+  cats = c.data; items = [];
+  if (cats.length) {
+    const i = await SB.from('menu_items').select('*').in('category_id', cats.map(x => x.id)).order('sort_order');
+    if (i.error) return toast(i.error.message);
+    items = i.data;
+  }
+  render(); scrollTo(0, y);
+}
+
+function itemHtml(i) {
+  return `<div class="item" data-iid="${i.id}">
+    <div class="row"><input data-f="name" value="${esc(i.name)}" aria-label="Item name"><input class="price" data-f="price" inputmode="decimal" value="${Number(i.price).toFixed(2)}" aria-label="Price"></div>
+    <input data-f="description" value="${esc(i.description)}" placeholder="Description (optional)" aria-label="Description">
+    <div class="row between">
+      <label class="chk"><input type="checkbox" data-f="available" ${i.available ? 'checked' : ''}> Available</label>
+      <span class="row"><button data-act="iup" aria-label="Move up">↑</button><button data-act="idown" aria-label="Move down">↓</button><button data-act="idel" class="danger">Remove</button></span>
+    </div>
+  </div>`;
+}
+
+function render() {
+  const menuUrl = new URL('menu.html?r=' + encodeURIComponent(R.slug), location.href).href;
+  let h = `<a class="btn" href="index.html">Back to dashboard</a>
+  <h1>${esc(R.name)}</h1>
+  <p class="mut"><a href="${esc(menuUrl)}" target="_blank" rel="noopener" style="color:var(--ac)">${esc(menuUrl)}</a></p>
+  <div class="panel"><details><summary>Site details</summary>
+    <form id="details" class="stack">
+      <input name="description" value="${esc(R.description)}" placeholder="Short description">
+      <input name="phone" value="${esc(R.phone)}" placeholder="Phone" inputmode="tel">
+      <input name="address" value="${esc(R.address)}" placeholder="Address">
+      <div class="row"><label class="mut">Accent color</label><input type="color" name="accent_color" value="${esc(R.accent_color || '#e11d48')}"><input name="currency" value="${esc(R.currency || '€')}" style="max-width:80px;flex:none" aria-label="Currency symbol"></div>
+      <button class="primary">Save details</button>
+    </form>
+    <div style="margin-top:12px"><button data-act="bulk">Change all prices by a percentage</button></div>
+  </details></div>`;
+
+  for (const c of cats) {
+    const list = items.filter(i => i.category_id === c.id);
+    h += `<section class="cat" data-cid="${c.id}">
+      <div class="row"><input class="cname" data-cf="name" value="${esc(c.name)}" aria-label="Category name">
+        <button data-act="cup" aria-label="Move up">↑</button><button data-act="cdown" aria-label="Move down">↓</button><button data-act="cdel" class="danger">Remove</button></div>
+      ${list.map(itemHtml).join('') || '<div class="mut">No items yet. Add the first one below.</div>'}
+      <form class="additem row" data-cid="${c.id}"><input name="name" placeholder="New item name" required><input name="price" inputmode="decimal" placeholder="Price" style="flex:0 0 90px" required><button class="primary">Add item</button></form>
+    </section>`;
+  }
+  h += `<form id="addcat" class="panel row"><input name="name" placeholder="New category, e.g. Desserts" required><button class="primary">Add category</button></form>`;
+  app.innerHTML = h;
+}
+
+async function move(table, list, id, dir) {
+  const arr = [...list], i = arr.findIndex(x => x.id === id), j = i + dir;
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  await Promise.all(arr.map((x, k) => SB.from(table).update({ sort_order: k }).eq('id', x.id)));
+  load();
+}
+const done = (error, msg) => { if (error) toast(error.message); else if (msg) toast(msg); };
+
+app.addEventListener('change', async e => {
+  const el = e.target, it = el.closest('.item'), ct = el.closest('.cat');
+  if (it && el.dataset.f) {
+    const f = el.dataset.f;
+    let v = el.type === 'checkbox' ? el.checked : el.value.trim();
+    if (f === 'price') { v = parsePrice(v); if (v === null) { toast('Enter a valid price'); return load(); } }
+    if (f === 'name' && !v) { toast('Name cannot be empty'); return load(); }
+    const { error } = await SB.from('menu_items').update({ [f]: v }).eq('id', it.dataset.iid);
+    done(error, 'Saved');
+    if (f === 'price' && !error) el.value = v.toFixed(2);
+  } else if (ct && el.dataset.cf) {
+    const v = el.value.trim();
+    if (!v) { toast('Name cannot be empty'); return load(); }
+    const { error } = await SB.from('menu_categories').update({ name: v }).eq('id', ct.dataset.cid);
+    done(error, 'Saved');
+  }
+});
+
+app.addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target, d = new FormData(f);
+  if (f.id === 'details') {
+    const { error } = await SB.from('restaurants').update({
+      description: d.get('description').trim() || null, phone: d.get('phone').trim() || null,
+      address: d.get('address').trim() || null, accent_color: d.get('accent_color'), currency: d.get('currency').trim() || '€'
+    }).eq('id', RID);
+    done(error, 'Details saved'); if (!error) load();
+  } else if (f.id === 'addcat') {
+    const { error } = await SB.from('menu_categories').insert({ restaurant_id: RID, name: d.get('name').trim(), sort_order: cats.length });
+    done(error); if (!error) load();
+  } else if (f.classList.contains('additem')) {
+    const price = parsePrice(d.get('price'));
+    if (price === null) return toast('Enter a valid price');
+    const count = items.filter(i => i.category_id === f.dataset.cid).length;
+    const { error } = await SB.from('menu_items').insert({ category_id: f.dataset.cid, name: d.get('name').trim(), price, sort_order: count });
+    done(error); if (!error) load();
+  }
+});
+
+app.addEventListener('click', async e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const act = b.dataset.act, ct = b.closest('.cat'), it = b.closest('.item');
+  if (act === 'cup' || act === 'cdown') return move('menu_categories', cats, ct.dataset.cid, act === 'cup' ? -1 : 1);
+  if (act === 'iup' || act === 'idown') {
+    const cid = ct.dataset.cid;
+    return move('menu_items', items.filter(i => i.category_id === cid), it.dataset.iid, act === 'iup' ? -1 : 1);
+  }
+  if (act === 'cdel' && confirm('Remove this category and all its items?')) {
+    const { error } = await SB.from('menu_categories').delete().eq('id', ct.dataset.cid); done(error); if (!error) load();
+  }
+  if (act === 'idel' && confirm('Remove this item?')) {
+    const { error } = await SB.from('menu_items').delete().eq('id', it.dataset.iid); done(error); if (!error) load();
+  }
+  if (act === 'bulk') {
+    const p = parseFloat(String(prompt('Change all prices by what percent? Use a minus sign to lower them, e.g. 5 or -10') || '').replace(',', '.'));
+    if (!isFinite(p) || !items.length) return;
+    if (!confirm(`Change ${items.length} prices by ${p}%?`)) return;
+    const res = await Promise.all(items.map(i => SB.from('menu_items').update({ price: Math.max(0, Math.round(Number(i.price) * (1 + p / 100) * 100) / 100) }).eq('id', i.id)));
+    const bad = res.find(r => r.error); done(bad && bad.error, 'Prices updated'); load();
+  }
+});
+
+init();
+</script>
+</body>
+</html>
