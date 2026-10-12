@@ -43,6 +43,11 @@ h2{font:700 24px/1.2 Georgia,"Times New Roman",serif;margin:0 0 6px;padding-bott
 .item .body{flex:1;min-width:0}
 .ph{flex:none;width:88px;height:88px;object-fit:cover;border-radius:10px;background:var(--chip)}
 .off .ph{opacity:.45}
+.info a.call{background:var(--ac);color:var(--acx,#fff);font-weight:700;font-size:15px;padding:10px 18px;box-shadow:0 4px 0 rgba(0,0,0,.28);transform:rotate(-2deg);transition:transform .15s,box-shadow .15s}
+.info a.call:active{transform:translateY(3px) rotate(0);box-shadow:0 1px 0 rgba(0,0,0,.28)}
+.call .ico{display:inline-block;transform-origin:50% 60%;animation:ring 3s ease-in-out infinite}
+@keyframes ring{0%,62%,100%{transform:rotate(0)}66%{transform:rotate(-18deg)}70%{transform:rotate(16deg)}74%{transform:rotate(-14deg)}78%{transform:rotate(10deg)}82%{transform:rotate(0)}}
+@media(prefers-reduced-motion:reduce){.call .ico{animation:none}}
 header.center{text-align:center}
 header.center .logo{margin-left:auto;margin-right:auto}
 header.center .info{justify-content:center}
@@ -95,7 +100,9 @@ async function init() {
     items = i.data;
   }
   document.title = R.name;
-  document.documentElement.style.setProperty('--ac', okColor(R.accent_color));
+  const ac = okColor(R.accent_color), an = parseInt(ac.slice(1), 16);
+  document.documentElement.style.setProperty('--ac', ac);
+  document.documentElement.style.setProperty('--acx', (0.299 * (an >> 16) + 0.587 * ((an >> 8) & 255) + 0.114 * (an & 255)) / 255 > 0.6 ? '#17191c' : '#ffffff');
   applyBg(R);
   const cur = R.currency || '€';
   const fmt = p => { const n = Number(p).toFixed(2); return cur === '€' ? n.replace('.', ',') + ' €' : cur + n; };
@@ -103,7 +110,7 @@ async function init() {
 
   const shown = cats.map(c => ({ c, list: items.filter(i => i.category_id === c.id) })).filter(x => x.list.length);
   let h = `<header class="${['center', 'right'].includes(R.header_align) ? R.header_align : ''}">${R.logo_url ? `<img class="logo" src="${esc(R.logo_url)}" alt="${esc(R.name)} logo">` : ''}<h1>${esc(R.name)}</h1>${R.description ? `<p class="desc">${esc(R.description)}</p>` : ''}<div class="info">
-    ${tel ? `<a href="tel:${esc(tel)}">Call ${esc(R.phone)}</a>` : ''}
+    ${tel ? `<a class="call" href="tel:${esc(tel)}"><span class="ico">📞</span> Call ${esc(R.phone)}</a>` : ''}
     ${R.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(R.address)}" target="_blank" rel="noopener">${esc(R.address)}</a>` : ''}</div></header>`;
   if (!shown.length) { h += '<div class="msg">The menu is coming soon.</div>'; app.innerHTML = h; return; }
   h += `<nav aria-label="Menu categories">${shown.map(({ c }) => `<a href="#c-${c.id}">${esc(c.name)}</a>`).join('')}</nav>`;
