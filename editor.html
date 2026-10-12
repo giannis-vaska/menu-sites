@@ -102,6 +102,9 @@ function render() {
     <div class="row" style="margin-bottom:12px"><div class="pic logo">${R.logo_url ? `<img src="${esc(R.logo_url)}" alt="">` : ''}</div>
       <label class="btn">${R.logo_url ? 'Change logo' : 'Add logo'}<input type="file" accept="image/*" data-up="logo" hidden></label>
       ${R.logo_url ? '<button data-act="rmlogo">Remove logo</button>' : ''}</div>
+    <div class="row" style="margin-bottom:12px"><div class="pic">${R.bg_image_url ? `<img src="${esc(R.bg_image_url)}" alt="">` : ''}</div>
+      <label class="btn">${R.bg_image_url ? 'Change background image' : 'Add background image'}<input type="file" accept="image/*" data-up="bg" hidden></label>
+      ${R.bg_image_url ? '<button data-act="rmbg">Remove image</button>' : ''}</div>
     <form id="details" class="stack">
       <input name="description" value="${esc(R.description)}" placeholder="Short description">
       <input name="phone" value="${esc(R.phone)}" placeholder="Phone" inputmode="tel">
@@ -109,6 +112,8 @@ function render() {
       <label class="fld mut">Logo and name position
         <select name="header_align">${['left', 'center', 'right'].map(a => `<option value="${a}" ${(R.header_align || 'left') === a ? 'selected' : ''}>${a[0].toUpperCase() + a.slice(1)}</option>`).join('')}</select>
       </label>
+      <div class="row"><label class="chk mut"><input type="checkbox" name="use_bg" ${R.bg_color ? 'checked' : ''}> Custom background color</label><input type="color" name="bg_color" value="${esc(R.bg_color || '#ffffff')}" aria-label="Background color"></div>
+      ${R.bg_image_url ? `<label class="fld mut">Image overlay strength (higher = easier to read text)<input type="range" name="bg_dim" min="0" max="90" value="${Number(R.bg_dim ?? 60)}"></label>` : ''}
       <div class="row"><label class="mut">Accent color</label><input type="color" name="accent_color" value="${esc(R.accent_color || '#e11d48')}"><input name="currency" value="${esc(R.currency || '€')}" style="max-width:80px;flex:none" aria-label="Currency symbol"></div>
       <button class="primary">Save details</button>
     </form>
@@ -152,7 +157,7 @@ async function removeFiles(urls) {
 }
 async function uploadImage(file, kind) {
   const logo = kind === 'logo';
-  const blob = await shrink(file, logo ? 500 : 900, logo ? 'image/png' : 'image/jpeg');
+  const blob = await shrink(file, logo ? 500 : kind === 'bg' ? 1400 : 900, logo ? 'image/png' : 'image/jpeg');
   const path = `${RID}/${kind}-${Date.now()}.${logo ? 'png' : 'jpg'}`;
   const { error } = await SB.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: '31536000' });
   if (error) throw error;
@@ -178,6 +183,11 @@ app.addEventListener('change', async e => {
       if (el.dataset.up === 'logo') {
         const old = R.logo_url, url = await uploadImage(file, 'logo');
         const { error } = await SB.from('restaurants').update({ logo_url: url }).eq('id', RID);
+        if (error) throw error;
+        await removeFiles([old]);
+      } else if (el.dataset.up === 'bg') {
+        const old = R.bg_image_url, url = await uploadImage(file, 'bg');
+        const { error } = await SB.from('restaurants').update({ bg_image_url: url }).eq('id', RID);
         if (error) throw error;
         await removeFiles([old]);
       } else {
@@ -212,7 +222,8 @@ app.addEventListener('submit', async e => {
   if (f.id === 'details') {
     const { error } = await SB.from('restaurants').update({
       description: d.get('description').trim() || null, phone: d.get('phone').trim() || null,
-      address: d.get('address').trim() || null, header_align: d.get('header_align'), accent_color: d.get('accent_color'), currency: d.get('currency').trim() || '€'
+      address: d.get('address').trim() || null, header_align: d.get('header_align'), bg_color: d.get('use_bg') ? d.get('bg_color') : null,
+      ...(d.get('bg_dim') !== null ? { bg_dim: parseInt(d.get('bg_dim'), 10) } : {}), accent_color: d.get('accent_color'), currency: d.get('currency').trim() || '€'
     }).eq('id', RID);
     done(error, 'Details saved'); if (!error) load();
   } else if (f.id === 'addcat') {
@@ -248,6 +259,11 @@ app.addEventListener('click', async e => {
   if (act === 'rmphoto') {
     const old = items.find(i => i.id === it.dataset.iid).image_url;
     const { error } = await SB.from('menu_items').update({ image_url: null }).eq('id', it.dataset.iid); done(error);
+    if (!error) { await removeFiles([old]); load(); }
+  }
+  if (act === 'rmbg') {
+    const old = R.bg_image_url;
+    const { error } = await SB.from('restaurants').update({ bg_image_url: null }).eq('id', RID); done(error);
     if (!error) { await removeFiles([old]); load(); }
   }
   if (act === 'rmlogo') {
